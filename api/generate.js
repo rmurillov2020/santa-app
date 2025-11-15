@@ -16,8 +16,8 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        avatar_name: "Santa Claus",
-        voice_id: "1bd001e7e50f421d891986a3a55c5a0d",
+        avatar_name: "Santa_Fireplace_Side_public",
+        voice_id: "79f84ce83ec34e75b600deec4c5c9de6",
         script,
         background: "christmas_tree"
       })
