@@ -3,10 +3,21 @@
   "builds": [
     {
       "src": "index.html",
-      "use": "@vercel/static-build"
+      "use": "@vercel/static"
+    },
+    {
+      "src": "api/generate.js",
+      "use": "@vercel/node"
     }
   ],
-  "env": {
-    "HEYGEN_API_KEY": "@heygen_api_key"
-  }
+  "routes": [
+    {
+      "src": "/api/generate",
+      "dest": "/api/generate.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
 }
