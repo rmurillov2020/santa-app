@@ -8,60 +8,57 @@ export default async function handler(req, res) {
   if (!HEYGEN_API_KEY) return res.status(500).json({ error: 'API Key no configurada' });
 
   try {
-    console.log('=== DEBUG INICIO ===');
+    console.log('=== DEBUG START ===');
     console.log('Script preview:', script.substring(0, 50) + '...');
-    console.log('API Key:', HEYGEN_API_KEY.substring(0, 10) + '...');  // Oculta por seguridad
+    console.log('API Key preview:', HEYGEN_API_KEY.substring(0, 10) + '...');
 
-    // BODY EXACTO DE DOCS V2 (con avatar_style y dimension fuera del array)
+    // BODY EXACTO DE DOCS V2 (ver docs.heygen.com/reference/generate-video)
     const payload = {
       "video_inputs": [
         {
           "character": {
-            "type": "avatar",
-            "avatar_id": "Santa_Fireplace_Side_public",  // TU SANTA
-            "avatar_style": "normal"
+            "type": "avatar",  // O "talking_photo" si tu Santa es photo
+            "avatar_id": "Santa_Fireplace_Side_public"
           },
           "voice": {
             "type": "text",
-            "voice_id": "1bd001e7e50f421d891986aad5158bc8",  // TU VOZ (cambia si falla)
-            "input_text": script,
-            "speed": 1.0
+            "voice_id": "79f84ce83ec34e75b600deec4c5c9de6",
+            "input_text": script
           }
         }
       ],
-      "test": true,  // TRUE para pruebas rápidas (sin costo)
+      "test": true,  // GRATIS para pruebas (sin créditos)
       "caption": false,
-      "aspect_ratio": "16:9",
       "dimension": {
         "width": 1280,
         "height": 720
-      },
-      "background": "default"  // Cambia a "christmas_tree" si existe
+      }
     };
 
-    console.log('Payload enviado:', JSON.stringify(payload, null, 2));  // DEBUG COMPLETO
+    console.log('Payload JSON:', JSON.stringify(payload, null, 2));
 
     const genRes = await fetch('https://api.heygen.com/v2/video/generate', {
       method: 'POST',
       headers: {
         'X-Api-Key': HEYGEN_API_KEY,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
       body: JSON.stringify(payload)
     });
 
-    const fullResponse = await genRes.text();  // Captura TODO
-    console.log('HeyGen raw response:', fullResponse);  // DEBUG CRUCIAL
-    console.log('Status:', genRes.status);
+    const fullResponse = await genRes.text();
+    console.log('HeyGen status:', genRes.status);
+    console.log('HeyGen raw response:', fullResponse.substring(0, 500) + '...');  // Primeros 500 chars
 
     if (!genRes.ok) {
-      let errorData;
+      let errorData = fullResponse;
       try {
         errorData = JSON.parse(fullResponse);
-      } catch {
-        errorData = { message: fullResponse };
+      } catch (e) {
+        console.error('Parse error:', e);
       }
-      console.error('HeyGen error parsed:', errorData);
+      console.error('HeyGen error:', errorData);
       throw new Error(`HeyGen ${genRes.status}: ${JSON.stringify(errorData)}`);
     }
 
@@ -72,19 +69,19 @@ export default async function handler(req, res) {
 
     console.log('Video ID:', videoId);
 
-    // POLLING CON DEBUG
+    // POLLING
     let videoUrl = null;
     for (let i = 0; i < 40; i++) {
-      await new Promise(r => setTimeout(r, 5000));
+      await new Promise(r => setTimeout(r, 3000));
       const statusRes = await fetch(`https://api.heygen.com/v2/video/status/${videoId}`, {
         headers: { 'X-Api-Key': HEYGEN_API_KEY }
       });
       const statusFull = await statusRes.text();
-      let statusData;
+      let statusData = statusFull;
       try {
         statusData = JSON.parse(statusFull);
-      } catch {
-        statusData = { message: statusFull };
+      } catch (e) {
+        console.error('Status parse error:', e);
       }
       console.log(`Polling ${i+1}: Status ${statusRes.status}, Data:`, statusData);
       if (statusData.data?.status === 'completed') {
@@ -96,11 +93,11 @@ export default async function handler(req, res) {
       }
     }
 
-    if (!videoUrl) throw new Error('Timeout (3 min)');
-    console.log('=== DEBUG FIN: URL ===', videoUrl);
+    if (!videoUrl) throw new Error('Timeout');
+    console.log('SUCCESS URL:', videoUrl);
     res.json({ video: videoUrl });
   } catch (err) {
-    console.error('=== ERROR TOTAL ===', err.message);
+    console.error('TOTAL ERROR:', err.message);
     res.status(500).json({ error: err.message });
   }
 }
