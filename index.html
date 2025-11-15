@@ -11,6 +11,7 @@
     .santa-img { width: 120px; animation: float 3s infinite; }
     @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
     .loading { display: none; }
+    .error { color: #ff6b6b; }
   </style>
 </head>
 <body class="py-5">
@@ -31,7 +32,7 @@
         </div>
         <div class="mb-3">
           <label class="form-label">Gustos (juguetes, animales, etc.)</label>
-          <textarea class="form-control" id="gustos" rows="2" placeholder="Me gustan los dinosaurios y el fútbol" required></textarea>
+          <textarea class="form-control" id="gustos" rows="2" placeholder="Me gustan los dinosaurios y el helado" required></textarea>
         </div>
         <button type="submit" class="btn btn-danger btn-lg w-100">¡Ver mi vídeo de Santa!</button>
       </form>
@@ -40,6 +41,8 @@
         <div class="spinner-border text-light" role="status"></div>
         <p>Santa está grabando tu mensaje... (10-20 seg)</p>
       </div>
+
+      <div id="error" class="error mt-3" style="display: none;"></div>
 
       <div id="videoContainer" class="mt-4" style="display: none;">
         <video controls class="w-100 rounded shadow-lg" style="max-height: 60vh;"></video>
@@ -50,22 +53,32 @@
   </div>
 
   <script>
-    // PEGA TU API KEY AQUÍ
-    const HEYGEN_API_KEY = 'PEGA_TU_API_KEY_AQUI';
+    // Usa variable de entorno (Vercel la inyecta)
+    const HEYGEN_API_KEY = typeof process !== 'undefined' && process.env?.HEYGEN_API_KEY 
+      ? process.env.HEYGEN_API_KEY 
+      : 'NO_API_KEY_CONFIGURED';
 
     const form = document.getElementById('santaForm');
     const loading = document.getElementById('loading');
     const videoContainer = document.getElementById('videoContainer');
+    const errorDiv = document.getElementById('error');
     const video = videoContainer.querySelector('video');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+
+      if (HEYGEN_API_KEY === 'NO_API_KEY_CONFIGURED') {
+        showError('Falta configurar la API Key en Vercel. Contacta al administrador.');
+        return;
+      }
+
       const nombre = document.getElementById('nombre').value.trim();
       const edad = document.getElementById('edad').value;
       const gustos = document.getElementById('gustos').value.trim();
 
       loading.style.display = 'block';
       videoContainer.style.display = 'none';
+      errorDiv.style.display = 'none';
 
       const script = `¡Ho ho ho! Hola ${nombre}, tienes ${edad} años. Me han dicho que te encantan ${gustos}. ¡Qué niño tan especial! Este año te portaste muy bien, así que te traeré algo muy bonito. ¡Nos vemos en Navidad!`;
 
@@ -74,45 +87,65 @@
         video.src = videoUrl;
         videoContainer.style.display = 'block';
       } catch (error) {
-        alert('Santa está muy ocupado. Intenta más tarde.');
-        console.error(error);
+        showError('Santa está muy ocupado. Intenta más tarde. (Revisa consola para detalles).');
+        console.error('Error completo:', error);
       } finally {
         loading.style.display = 'none';
       }
     });
 
     async function generarVideoHeyGen(texto) {
+      console.log('Iniciando generación con clave:', HEYGEN_API_KEY ? 'CONFIGURADA' : 'NO CONFIGURADA');  // Debug
+
       const res = await fetch('https://api.heygen.com/v2/video/generate', {
         method: 'POST',
-        headers: {     
-          'X-Api-Key': `${HEYGEN_API_KEY}`,
-          'Content-Type': 'application/json'    
+        headers: {
+          'X-Api-Key': `${HEYGEN_API_KEY}`,  // ← ¡FIX: Header correcto para HeyGen!
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           "avatar_name": "Santa Claus",
-          "voice_id": "1bd001e7e50f421d891986a3a55c5a0d", // Voz en español
+          "voice_id": "1bd001e7e50f421d891986a3a55c5a0d", // Español neutro
           "script": texto,
           "background": "christmas_tree"
         })
       });
 
+      console.log('Respuesta inicial:', res.status, res.statusText);  // Debug
+
+      if (!res.ok) {
+        const errorData = await res.text();
+        throw new Error(`Error ${res.status}: ${errorData}`);
+      }
+
       const data = await res.json();
-      if (!data.data?.video_id) throw new Error('Error al generar');
+      console.log('Datos de respuesta:', data);  // Debug
+
+      if (!data.data?.video_id) throw new Error('Error al iniciar generación: ' + JSON.stringify(data));
 
       let videoUrl = null;
       for (let i = 0; i < 40; i++) {
         await new Promise(r => setTimeout(r, 3000));
         const status = await fetch(`https://api.heygen.com/v2/video/status/${data.data.video_id}`, {
-          headers: { 'Authorization': `Bearer ${HEYGEN_API_KEY}` }
+          headers: { 
+            'X-Api-Key': `${HEYGEN_API_KEY}`  // ← FIX: También aquí
+          }
         });
         const result = await status.json();
+        console.log(`Check ${i+1}:`, result.data?.status);  // Debug
         if (result.data?.status === 'completed') {
           videoUrl = result.data.video_url;
           break;
         }
+        if (result.data?.status === 'failed') throw new Error('Fallo al generar vídeo');
       }
       if (!videoUrl) throw new Error('Tiempo agotado');
       return videoUrl;
+    }
+
+    function showError(msg) {
+      errorDiv.textContent = msg;
+      errorDiv.style.display = 'block';
     }
   </script>
 </body>
