@@ -12,27 +12,33 @@ export default async function handler(req, res) {
     console.log('Script preview:', script.substring(0, 50) + '...');
     console.log('API Key preview:', HEYGEN_API_KEY.substring(0, 10) + '...');
 
-    // BODY EXACTO DE DOCS V2 (ver docs.heygen.com/reference/generate-video)
+    // BODY EXACTO DE DOCS V2 PARA TALKING PHOTO (tu Santa es photo, no avatar)
     const payload = {
       "video_inputs": [
         {
           "character": {
-            "type": "avatar",  // O "talking_photo" si tu Santa es photo
-            "avatar_id": "Santa_Fireplace_Side_public"
+            "type": "talking_photo",  // ← CLAVE: Para Santa_Fireplace_Side_public
+            "talking_photo_id": "Santa_Fireplace_Side_public"  // ← ID como photo
           },
           "voice": {
             "type": "text",
-            "voice_id": "79f84ce83ec34e75b600deec4c5c9de6",
-            "input_text": script
+            "voice_id": "79f84ce83ec34e75b600deec4c5c9de6",  // TU VOZ
+            "input_text": script,
+            "speed": 1.0
+          },
+          "background": {
+            "type": "color",
+            "color": "#ffffff"  // Blanco simple; cambia a video URL si quieres
           }
         }
       ],
-      "test": true,  // GRATIS para pruebas (sin créditos)
+      "test": true,  // ← GRATIS para pruebas (sin créditos)
       "caption": false,
       "dimension": {
-        "width": 1280,
-        "height": 720
-      }
+        "width": 720,  // Baja res para free tier
+        "height": 1280
+      },
+      "aspect_ratio": "9:16"  // Vertical para móviles
     };
 
     console.log('Payload JSON:', JSON.stringify(payload, null, 2));
@@ -49,7 +55,7 @@ export default async function handler(req, res) {
 
     const fullResponse = await genRes.text();
     console.log('HeyGen status:', genRes.status);
-    console.log('HeyGen raw response:', fullResponse.substring(0, 500) + '...');  // Primeros 500 chars
+    console.log('HeyGen raw response (first 500 chars):', fullResponse.substring(0, 500) + '...');
 
     if (!genRes.ok) {
       let errorData = fullResponse;
@@ -58,7 +64,7 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error('Parse error:', e);
       }
-      console.error('HeyGen error:', errorData);
+      console.error('HeyGen error parsed:', errorData);
       throw new Error(`HeyGen ${genRes.status}: ${JSON.stringify(errorData)}`);
     }
 
@@ -69,10 +75,10 @@ export default async function handler(req, res) {
 
     console.log('Video ID:', videoId);
 
-    // POLLING
+    // POLLING CON DEBUG
     let videoUrl = null;
     for (let i = 0; i < 40; i++) {
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise(r => setTimeout(r, 5000));  // 5s para free tier
       const statusRes = await fetch(`https://api.heygen.com/v2/video/status/${videoId}`, {
         headers: { 'X-Api-Key': HEYGEN_API_KEY }
       });
@@ -83,7 +89,7 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error('Status parse error:', e);
       }
-      console.log(`Polling ${i+1}: Status ${statusRes.status}, Data:`, statusData);
+      console.log(`Polling ${i+1}: Status ${statusRes.status}, Data preview:`, JSON.stringify(statusData).substring(0, 200));
       if (statusData.data?.status === 'completed') {
         videoUrl = statusData.data.video_url;
         break;
@@ -93,11 +99,11 @@ export default async function handler(req, res) {
       }
     }
 
-    if (!videoUrl) throw new Error('Timeout');
-    console.log('SUCCESS URL:', videoUrl);
+    if (!videoUrl) throw new Error('Timeout (3 min)');
+    console.log('=== SUCCESS URL ===', videoUrl);
     res.json({ video: videoUrl });
   } catch (err) {
-    console.error('TOTAL ERROR:', err.message);
+    console.error('=== TOTAL ERROR ===', err.message);
     res.status(500).json({ error: err.message });
   }
 }
